@@ -67,22 +67,21 @@ int main(int argc, char** argv)
 {
   ros::init(argc, argv, "stim300_driver_node");
 
-  ros::NodeHandle node;
+  ros::NodeHandle node("~");
 
-  std::string device_name;
-  double variance_gyro{0};
-  double variance_acc{0};
+  std::string device_name, imu_frame, imu_output;
+  // double variance_gyro{0};
+  // double variance_acc{0};
   int sample_rate{0};
   double gravity{0};
 
-
+  // node.param("variance_gyro", variance_gyro,0.0001*2*4.6*pow(10,-4));
+  // node.param("variance_acc", variance_acc, 0.000055); 
   node.param<std::string>("device_name", device_name, "/dev/ttyUSB0");
-
-  node.param("variance_gyro", variance_gyro,0.0001*2*4.6*pow(10,-4));
-  node.param("variance_acc", variance_acc, 0.000055); 
   node.param("sample_rate", sample_rate, 125);
-
   node.param("gravity", gravity, 9.80665);
+  node.param<std::string>("imu_output", imu_output, "stim_imu");
+  node.param<std::string>("imu_frame", imu_frame, "imu_link");
 
   // These values have been estimated by having beluga in a pool for a couple of minutes, and then calculate the variance for each values
   sensor_msgs::Imu stim300msg{};
@@ -95,10 +94,9 @@ int main(int argc, char** argv)
   stim300msg.orientation.x = 0.00000024358;
   stim300msg.orientation.y = 0.00000024358;
   stim300msg.orientation.z = 0.00000024358;
-  stim300msg.header.frame_id = "imu_0";
+  stim300msg.header.frame_id = imu_frame;
 
-
-  ros::Publisher imuSensorPublisher = node.advertise<sensor_msgs::Imu>("imu/data_raw", 1000);
+  ros::Publisher imuSensorPublisher = node.advertise<sensor_msgs::Imu>(imu_output, 1000);
   //ros::Publisher orientationPublisher = node.advertise<sensor_msgs::Imu>("imu/orientation", 1000);
   ros::ServiceServer service = node.advertiseService("IMU_calibration",responseCalibrateIMU);
 
@@ -107,7 +105,10 @@ int main(int argc, char** argv)
   // As loop_rate determines how often we check for new data
   // on the serial buffer, theoretically loop_rate = sample_rate
   // should be okey, but to be sure we double it
-  ros::Rate loop_rate(sample_rate * 2);
+  // ros::Rate loop_rate(sample_rate*2);
+  
+  // Nacho: we don't do that
+  ros::Rate loop_rate(sample_rate);
 
   try {
     SerialUnix serial_driver(device_name, stim_const::BaudRate::BAUD_921600);
@@ -148,8 +149,6 @@ int main(int argc, char** argv)
     double dropped_gyro_z_msg{0.0};
 
   
-
-
     while (ros::ok())
     {
       switch (driver_stim300.update())
@@ -200,6 +199,7 @@ int main(int argc, char** argv)
             {
                     RPY.roll = atan2(inclination_y,inclination_z);
                     RPY.pitch = atan2(-inclination_x,sqrt(pow(inclination_y,2)+pow(inclination_z,2)));
+                    RPY.yaw = 0.;
                     q = FromRPYToQuaternion(RPY);
 
                     // Acceleration wild point filter
@@ -277,7 +277,7 @@ int main(int argc, char** argv)
 
                       if(std::abs(gyro_buffer_y.back() - gyro_buffer_y.front()) < std::max(2*std::abs(gyro_buffer_y.front()),GYRO_Y_PEAK_TO_PEAK_NOISE) || dropped_gyro_y_msg > MAX_DROPPED_GYRO_Y_MSG)
                       {
-                        stim300msg.angular_velocity.x = gyro_buffer_y.back();
+                        stim300msg.angular_velocity.y = gyro_buffer_y.back();
                         dropped_gyro_y_msg = 0;
                       }
                       else
@@ -318,7 +318,8 @@ int main(int argc, char** argv)
         case Stim300Status::CONFIG_CHANGED:
           ROS_INFO("Updated Stim 300 imu config: ");
           ROS_INFO("%s", driver_stim300.printSensorConfig().c_str());
-          loop_rate = driver_stim300.getSampleRate()*2;
+          // loop_rate = driver_stim300.getSampleRate()*2;
+          loop_rate = driver_stim300.getSampleRate();
           break;
         case Stim300Status::STARTING_SENSOR:
           ROS_INFO("Stim 300 IMU is warming up.");
