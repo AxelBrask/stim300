@@ -34,41 +34,23 @@ int main(int argc, char** argv)
 {
   rclcpp::init(argc, argv);
 
-//   rclcpp::NodeHandle node("~")
   auto node = rclcpp::Node::make_shared("stim300_driver_node");
-  // std::string imu_path;
-  // std::string imu_link;
-  // std::string imu_output;
   node->declare_parameter<std::string>("device_path", "/dev/ttyUSB0");
   std::string imu_path = node->get_parameter("device_path").as_string();
-  // node.param<std::string>("device_path", imu_path, "/dev/ttyUSB0");
-  // node.param<std::string>("imu_frame", imu_link, "sam/imu_link");
-//   node.param<std::string>("imu_output", imu_output, "stim_imu");
 
   std::string device_name;
-  // double stanardDeivationOfGyro{ 0 };
-  // double stanardDeviationOfAcc{ 0 };
   double varianceOfGyro{ 0 };
   double varianceOfAcc{ 0 };
-  // int sampleRate{ 0 };
 
   SerialUnix serial_driver(imu_path);
   DriverStim300 driver_stim300(serial_driver);
 
-  node->declare_parameter<double>("stanard_deviation_of_gyro", averageAllanVarianceOfGyro);
-  double stanardDeivationOfGyro = node->get_parameter("stanard_deviation_of_gyro").as_double();
-  // node.param("stanard_deviation_of_gyro", stanardDeivationOfGyro, averageAllanVarianceOfGyro);
+  double standardDeivationOfGyro = node->declare_parameter<double>("stanard_deviation_of_gyro", averageAllanVarianceOfGyro);
+  double standardDeviatinOfAcc = node->declare_parameter<double>("stanard_deviation_of_acc", averageAllanVarianceOfAcc);
+  int sampleRate = node->declare_parameter<int>("sample_rate", defaultSampleRate);
 
-  // node.param("stanard_deviation_of_acc", stanardDeviationOfAcc, averageAllanVarianceOfAcc);
-  node->declare_parameter<double>("stanard_deviation_of_acc", averageAllanVarianceOfAcc);
-  double stanardDeviationOfAcc = node->get_parameter("stanard_deviation_of_acc").as_double();
-
-  // node.param("sample_rate", sampleRate, defaultSampleRate);
-  node->declare_parameter<int>("sample_rate", defaultSampleRate);
-  int sampleRate = node->get_parameter("sample_rate").as_int();
-
-  varianceOfGyro = sampleRate * pow(stanardDeivationOfGyro, 2);
-  varianceOfAcc = sampleRate * pow(stanardDeviationOfAcc, 2);
+  varianceOfGyro = sampleRate * pow(standardDeivationOfGyro, 2);
+  varianceOfAcc = sampleRate * pow(standardDeviatinOfAcc, 2);
 
   sensor_msgs::msg::Imu imu_msg_template{};
   imu_msg_template.orientation_covariance[0] = 0.05;
@@ -85,32 +67,28 @@ int main(int argc, char** argv)
   imu_msg_template.orientation.z = 0;
   imu_msg_template.header.frame_id = sam_msgs::msg::Links::IMU_LINK;
 
-//   ros::Publisher imuSensorPublisher = node.advertise<sensor_msgs::Imu>(imu_output, 1000);
   auto imuSensorPublisher = node -> create_publisher<sensor_msgs::msg::Imu>(sam_msgs::msg::Topics::STIM_IMU_TOPIC,1000);
 
   rclcpp::Rate loop_rate(125);
 
-  // ROS_INFO("STIM300 IMU initialized successfully");
   RCLCPP_INFO(node->get_logger(), "STIM300 IMU initialized successfully");
 
   while (rclcpp::ok())
   {
     sensor_msgs::msg::Imu stim300msg = imu_msg_template;
 
-    stim300msg.header.stamp = rclcpp::Clock().now();
+    stim300msg.header.stamp = node->get_clock()->now();
 
     if (driver_stim300.processPacket())
     {
       if (!driver_stim300.isChecksumGood())
       {
-        // ROS_WARN("stim300 CRC error ");
         RCLCPP_WARN(node->get_logger(), "stim300 CRC error ");
         continue;
       }
 
       if (!driver_stim300.isSensorStatusGood())
       {
-        // ROS_WARN("STIM300: Internal hardware error");
         RCLCPP_WARN(node->get_logger(), "STIM300: Internal hardware error");
         continue;
       }
