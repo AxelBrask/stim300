@@ -35,8 +35,9 @@ int main(int argc, char** argv)
   rclcpp::init(argc, argv);
 
   auto node = rclcpp::Node::make_shared("stim300_driver_node");
-  node->declare_parameter<std::string>("device_path", "/dev/ttyUSB0");
-  std::string imu_path = node->get_parameter("device_path").as_string();
+  node->declare_parameter<std::string>("device_name", "/dev/ttyUSB0");
+  std::string imu_path = node->get_parameter("device_name").as_string();
+  RCLCPP_INFO(node->get_logger(), "STIM300 IMU path: %s", imu_path.c_str());
 
   std::string device_name;
   double varianceOfGyro{ 0 };
